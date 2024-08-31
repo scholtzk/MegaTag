@@ -100,7 +100,7 @@
         const database = firebase.database();
 
 let countdown;
-let gameEnded = true;
+let gameEnded = false;
 
 function startTimer() {
     clearInterval(countdown);
@@ -112,7 +112,10 @@ function updateTimer() {
     if (gameEnded) return;
 
     const now = new Date();
-    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+    const endTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 5, 0); // 5:05 PM
+    if (now > endTime) {
+        endTime.setDate(endTime.getDate() + 1); // If it's past 5:05 PM, set end time to tomorrow
+    }
     const timeLeft = Math.max(Math.floor((midnight - now) / 1000), 0);
 
     const hours = Math.floor(timeLeft / 3600);
