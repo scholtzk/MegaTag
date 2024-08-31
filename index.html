@@ -154,10 +154,10 @@ function endGame() {
     });
     
     // Save game result to database
-    database.ref('gameResults').push({
-        endTime: firebase.database.ServerValue.TIMESTAMP,
-        winner: document.getElementById('currentName').textContent.split(': ')[1]
-    });
+   // database.ref('gameResults').push({
+  //      endTime: firebase.database.ServerValue.TIMESTAMP,
+  //      winner: document.getElementById('currentName').textContent.split(': ')[1]
+  //  });
     
     // Show a game over popup or change background
     showGameOverPopup();
