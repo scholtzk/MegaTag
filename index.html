@@ -99,8 +99,8 @@
         firebase.initializeApp(firebaseConfig);
         const database = firebase.database();
 
-        let countdown;
-        let timeLeft = 24 * 60 * 60; // 24 hours in seconds
+let countdown;
+let gameEnded = false;
 
 function startTimer() {
     clearInterval(countdown);
@@ -109,35 +109,84 @@ function startTimer() {
 }
 
 function updateTimer() {
+    if (gameEnded) return;
+
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+    const timeLeft = Math.max(Math.floor((midnight - now) / 1000), 0);
+
+    const hours = Math.floor(timeLeft / 3600);
+    const minutes = Math.floor((timeLeft % 3600) / 60);
+    const seconds = timeLeft % 60;
+
+    document.getElementById('timer').textContent = 
+        `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+
+    if (timeLeft === 0) {
+        endGame();
+    }
+}
+
+function endGame() {
+    clearInterval(countdown);
+    gameEnded = true;
+    
+    // Display end game message
+    document.getElementById('timer').textContent = "GAME OVER";
+    
+    // Disable name input
+    const nameInput = document.getElementById('nameInput');
+    nameInput.disabled = true;
+    nameInput.placeholder = "Game has ended";
+    
+    // Play end game sound (if you have one)
+    const endGameSound = document.getElementById('endGameSound');
+    if (endGameSound) {
+        endGameSound.play().catch(error => console.log('End game sound autoplay prevented:', error));
+    }
+    
+    // Show final winner
     database.ref('timer').once('value', (snapshot) => {
         const data = snapshot.val();
-        if (data && data.startTime) {
-            const currentTime = Date.now();
-            const elapsedSeconds = Math.floor((currentTime - data.startTime) / 1000);
-            timeLeft = Math.max(24 * 60 * 60 - elapsedSeconds, 0);
-
-            const hours = Math.floor(timeLeft / 3600);
-            const minutes = Math.floor((timeLeft % 3600) / 60);
-            const seconds = timeLeft % 60;
-
-            document.getElementById('timer').textContent = 
-                `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-
-            if (timeLeft === 0) {
-                clearInterval(countdown);
-            }
+        if (data && data.currentName) {
+            document.getElementById('currentName').textContent = `Final Winner: ${data.currentName}`;
         }
     });
+    
+    // Save game result to database
+    database.ref('gameResults').push({
+        endTime: firebase.database.ServerValue.TIMESTAMP,
+        winner: document.getElementById('currentName').textContent.split(': ')[1]
+    });
+    
+    // Show a game over popup or change background
+    showGameOverPopup();
+}
+
+function showGameOverPopup() {
+    const popupImage = document.createElement('img');
+    popupImage.id = 'gameOverPopup';
+    popupImage.src = 'game_over.jpg'; // Make sure to have this image in your directory
+    popupImage.alt = 'Game Over';
+    popupImage.style.cssText = 'display: block; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 90%; max-height: 90%; z-index: 1000;';
+    document.body.appendChild(popupImage);
 }
 
 function resetTimer(name) {
-    const startTime = Date.now();
+    if (gameEnded) return;
+
     database.ref('timer').set({
-        startTime: startTime,
         currentName: name,
-        taggedAt: startTime // Store the time when the player was tagged
+        taggedAt: firebase.database.ServerValue.TIMESTAMP
     });
     logNameInput(name);
+    updateCurrentName(name);
+}
+
+function updateCurrentName(name) {
+    const now = new Date();
+    const formattedTime = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+    document.getElementById('currentName').textContent = `Current: ${name} (Tagged at ${formattedTime})`;
 }
 
 function logNameInput(name) {
@@ -149,46 +198,37 @@ function logNameInput(name) {
 
     // Play the notification sound
     const notificationSound = document.getElementById('notificationSound');
-    notificationSound.volume = 1; // Set the volume to 50%
+    notificationSound.volume = 1;
     notificationSound.play().catch(error => console.log('Notification sound autoplay prevented:', error));
 }
-        
-function updateCurrentName(name, taggedAt) {
-    const taggedDate = new Date(taggedAt);
-    const formattedTime = taggedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
-    document.getElementById('currentName').textContent = `Current: ${name} (Tagged at ${formattedTime})`;
-}
 
-function showPopup() {
-    const popupImage = document.createElement('img');
-    popupImage.id = 'popupImage';
-    popupImage.src = 'popup.jpg';
-    popupImage.alt = 'Popup Image';
-    popupImage.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1000;';
-    document.body.appendChild(popupImage);
-    popupImage.style.display = 'block';
+document.addEventListener('DOMContentLoaded', function() {
+    startTimer(); // Start the timer when the page loads
     
-    setTimeout(() => {
-        popupImage.remove();
-    }, 3000);
-}        
-
-        document.getElementById('nameInput').addEventListener('keyup', function(event) {
-            if (event.key === 'Enter') {
-                const name = this.value.trim();
-                if (name) {
-                    resetTimer(name);
-                    this.value = '';
-                }
-            }
-        });
-
-database.ref('timer').on('value', (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-        updateCurrentName(data.currentName || '', data.taggedAt || Date.now());
-        startTimer();
+    // Check if the game has already ended
+    const now = new Date();
+    const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0);
+    if (now >= midnight) {
+        endGame();
     }
+    
+    document.getElementById('nameInput').addEventListener('keyup', function(event) {
+        if (event.key === 'Enter') {
+            const name = this.value.trim();
+            if (name) {
+                resetTimer(name);
+                this.value = '';
+            }
+        }
+    });
+
+    // Fetch the current name when the page loads
+    database.ref('timer').once('value', (snapshot) => {
+        const data = snapshot.val();
+        if (data && data.currentName) {
+            updateCurrentName(data.currentName);
+        }
+    });
 });
 
 document.addEventListener('DOMContentLoaded', function() {
